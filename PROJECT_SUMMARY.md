@@ -69,7 +69,7 @@ Developed and tested on Python 3.14 with PySide6 6.11 and pypdf 6; minimums are 
 
 The version is defined once, as `__version__` in `pdf_renamer_core.py`, using `MAJOR.MINOR.PATCH` (semantic versioning). It is currently **2.0.0**: the tkinter app counts as 1.x, and the PySide6 rewrite is 2.0.0.
 
-It appears in the main window title, at the bottom of the Help window, and in the `.exe`'s Properties > Details tab (`pdf-renamer-v2.spec` reads it at build time). To release, bump the number and tag the commit (e.g. `v2.1.0`). Bump PATCH for fixes, MINOR for new features, and MAJOR for breaking changes.
+It appears in the main window title, at the bottom of the Help window, and in the `.exe`'s Properties > Details tab (`pdf-renamer-v2.spec` reads it at build time). To release, bump the number and tag the commit to match the existing `V2.0.0` style (e.g. `V2.1.0`). Bump PATCH for fixes, MINOR for new features, and MAJOR for breaking changes.
 
 ## Licence and credits
 
@@ -90,13 +90,13 @@ Licensed under CC BY-NC-SA 4.0 (see `LICENSE.md`); author Jim Finn. The app note
 | `d4c7d9f` | Original tkinter app (`pdf-renamer.py`) and first v2 |
 | `dd42935` | Rewrite in PySide6: pre-run checks, conflict modes, output folder, settings, presets, themes, icon, help |
 | `dd3c8d3` | Core logic split into `pdf_renamer_core.py`; pytest suite added. The tests found and fixed a bug: renaming wiped all existing metadata except Title/Author. |
-| *(next commit)* | `.gitignore` now covers `dist/`, `__pycache__/`, `*.pyc` and virtual environments. Added `README.md` (seeded from this summary and `HELP.md`) and this `PROJECT_SUMMARY.md`. Version **2.0.0** introduced (see Versioning). Added an **About** button and window, licensed the project under **CC BY-NC-SA 4.0** (`LICENSE.md`), and stamped the author and licence into the `.exe`'s file properties. Built `dist/PDF-Renamer-2.0.0.exe` (48.2 MB, SHA-256 `083E8814…282532E`) for the v2.0.0 GitHub Release. Added `.gitattributes` (`* text=auto`, binaries marked) so line endings are normalised. |
+| `f9136c1` (tag `V2.0.0`, GitHub Release 2.0.0) | `.gitignore` now covers `dist/`, `__pycache__/`, `*.pyc` and virtual environments. Added `README.md` (seeded from this summary and `HELP.md`) and this `PROJECT_SUMMARY.md`. Version **2.0.0** introduced (see Versioning). Added an **About** button and window, licensed the project under **CC BY-NC-SA 4.0** (`LICENSE.md`), and stamped the author and licence into the `.exe`'s file properties. Built `dist/PDF-Renamer-2.0.0.exe` (48.2 MB, SHA-256 `083E8814…282532E`) for the v2.0.0 GitHub Release. Added `.gitattributes` (`* text=auto`, binaries marked) so line endings are normalised. |
+| *(next commit)* | Removed the old tkinter build `dist/PDF Renamer.exe` from the repo (builds are now published as GitHub Release assets). |
 
 The history was carried over from `Coding-Projects` (`pdf renamer/` folder) using `git subtree split`, so the hashes differ from the original repo.
 
 ## Known issues and loose ends
 
-- **`dist/PDF Renamer.exe` in this repo is the old tkinter build**, not v2. `dist/` is now in `.gitignore`, but the file is still tracked: untrack it (`git rm --cached "dist/PDF Renamer.exe"`) and publish builds as GitHub Release assets.
 - Processing runs on the GUI thread, so the window can stutter on very large PDFs and there's no Cancel.
 - Move Up/Down only change the processing order, which has no visible effect on output names until an `{i}` placeholder exists (see Roadmap).
 
