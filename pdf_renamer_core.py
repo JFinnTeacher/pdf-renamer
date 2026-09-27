@@ -12,6 +12,15 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
+# The app's version, shown in the GUI and stamped into the .exe by pdf-renamer-v2.spec.
+__version__ = "2.0.0"
+
+# Shown in the About window and the .exe's file properties.
+AUTHOR = "Jim Finn"
+REPO_URL = "https://github.com/JFinnTeacher/pdf-renamer"
+LICENSE_NAME = "CC BY-NC-SA 4.0"
+LICENSE_URL = "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
 
 

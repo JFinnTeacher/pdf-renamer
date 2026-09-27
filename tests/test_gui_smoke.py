@@ -78,3 +78,12 @@ def test_presets_round_trip(window, gui, monkeypatch):
     window.preset_combo.setCurrentIndex(window.preset_combo.findData("Chapters"))
     window._on_preset_chosen(0)
     assert window._current_patterns() == {"title": "Chapter {n}", "author": "", "pad": 3}
+
+
+def test_about_dialog(window, gui):
+    dialog = gui.AboutDialog(window)
+    text = dialog.findChildren(gui.QLabel)[-1].text()
+    assert gui.REPO_URL in text
+    assert gui.LICENSE_NAME in text
+    assert "Claude" in text
+    dialog.close()

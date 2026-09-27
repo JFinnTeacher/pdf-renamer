@@ -13,10 +13,13 @@ Requires: pip install pypdf PySide6
 """
 
 import json
+import platform
 import sys
 from datetime import datetime
 from pathlib import Path
 
+import pypdf
+import PySide6
 from PySide6.QtCore import QEvent, QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QIcon, QKeySequence, QPalette
 from PySide6.QtWidgets import (
@@ -30,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_renamer_core import (
+    AUTHOR, LICENSE_NAME, LICENSE_URL, REPO_URL, __version__,
     apply_pattern, check_batch, natural_key, process_file, read_existing_metadata,
 )
 
@@ -320,6 +324,50 @@ class HelpDialog(QDialog):
         except OSError:
             browser.setPlainText(f"The help file could not be found.\n\nExpected it at:\n{help_file}")
         layout.addWidget(browser)
+        bottom = QHBoxLayout()
+        bottom.addWidget(QLabel(f"PDF Renamer version {__version__}"))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.close)
+        bottom.addWidget(buttons)
+        layout.addLayout(bottom)
+
+
+class AboutDialog(QDialog):
+    """Version, author, repository link, licence and credits."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("About PDF Renamer")
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        heading = QLabel("PDF Renamer")
+        heading.setObjectName("Heading")
+        layout.addWidget(heading)
+        version = QLabel(f"Version {__version__}")
+        version.setObjectName("Muted")
+        layout.addWidget(version)
+
+        details = QLabel(
+            "<p>Batch-renames PDF files and writes a Title (and optionally an Author) "
+            "into each file's metadata.</p>"
+            f"<p>Created by {AUTHOR}.<br>"
+            f'Source code: <a href="{REPO_URL}">{REPO_URL}</a></p>'
+            f'<p>Licensed under <a href="{LICENSE_URL}">Creative Commons '
+            f"Attribution-NonCommercial-ShareAlike 4.0 International ({LICENSE_NAME})</a>. "
+            "You may share and adapt it for non-commercial purposes, as long as you give "
+            "credit and share your changes under the same licence.</p>"
+            '<p>Created with the assistance of <a href="https://claude.ai">Claude</a>, '
+            "an AI assistant made by Anthropic.</p>"
+            f"<p>Python {platform.python_version()} · PySide6 {PySide6.__version__} · "
+            f"pypdf {pypdf.__version__}</p>"
+        )
+        details.setWordWrap(True)
+        details.setOpenExternalLinks(True)
+        details.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        details.setMinimumWidth(460)
+        layout.addWidget(details)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.close)
         layout.addWidget(buttons)
@@ -328,7 +376,7 @@ class HelpDialog(QDialog):
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PDF Renamer")
+        self.setWindowTitle(f"PDF Renamer {__version__}")
         self.resize(1000, 700)
         self.setAcceptDrops(True)
 
@@ -437,6 +485,10 @@ class App(QMainWindow):
         help_button.setToolTip("How to use PDF Renamer (F1)")
         help_button.clicked.connect(self.show_help)
         header.addWidget(help_button, alignment=Qt.AlignmentFlag.AlignTop)
+        about_button = QPushButton("ⓘ About")
+        about_button.setToolTip("Version, licence and credits")
+        about_button.clicked.connect(self.show_about)
+        header.addWidget(about_button, alignment=Qt.AlignmentFlag.AlignTop)
         root.addLayout(header)
 
         # Naming patterns
@@ -810,6 +862,9 @@ class App(QMainWindow):
         self._help_window.show()
         self._help_window.raise_()
         self._help_window.activateWindow()
+
+    def show_about(self):
+        AboutDialog(self).exec()
 
     def open_settings(self):
         dialog = SettingsDialog(self.prefs, self, on_reset_columns=self.reset_column_widths)
@@ -1339,6 +1394,7 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("PDFRenamer.App")
 
     app = QApplication(sys.argv)
+    app.setApplicationVersion(__version__)
     app.setStyle("Fusion")
     app.setFont(QFont("Segoe UI", 10))
     icon_file = resource_path("app.ico")

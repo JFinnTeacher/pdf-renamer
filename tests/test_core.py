@@ -9,7 +9,7 @@ from pypdf import PdfReader, PdfWriter
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pdf_renamer_core import (  # noqa: E402
-    apply_pattern, check_batch, extract_number, natural_key, process_file,
+    __version__, apply_pattern, check_batch, extract_number, natural_key, process_file,
     read_existing_metadata, sanitize_filename, target_path, unique_path,
 )
 
@@ -222,3 +222,9 @@ def test_read_existing_metadata(tmp_path):
     bad = tmp_path / "bad.pdf"
     bad.write_bytes(b"junk")
     assert read_existing_metadata(bad) == ("", "")
+
+
+def test_version_is_three_part_number():
+    # pdf-renamer-v2.spec turns this into the .exe's numeric version, so it must be X.Y.Z.
+    assert len(__version__.split(".")) == 3
+    assert all(part.isdigit() for part in __version__.split("."))

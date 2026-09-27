@@ -1,2 +1,12 @@
+# Build output (publish the .exe as a GitHub Release asset instead)
 build/
+dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Tests
 .pytest_cache/

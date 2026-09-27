@@ -104,4 +104,5 @@ The log records every action with a timestamp.
 
 - **Renaming in place replaces the original file.** For important files, use *Save renamed copies to an output folder* in Settings, or keep a backup.
 - Each new PDF is fully written before the original is removed, so a failure part-way through won't leave a half-written file.
+- Click **About** for the version number, licence (CC BY-NC-SA 4.0) and a link to the source code.
 - Your settings, presets, patterns and window layout are saved to `%APPDATA%\PDF Renamer\settings.ini`. Delete that file to start from the defaults.

@@ -1,5 +1,35 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import sys
+
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo, VarStruct,
+    VSVersionInfo,
+)
+
+# Read the version from the core module so it's only defined in one place.
+sys.path.insert(0, SPECPATH)
+from pdf_renamer_core import AUTHOR, LICENSE_NAME, __version__
+
+version_tuple = tuple(int(part) for part in __version__.split(".")) + (0,)
+
+# Shown in the .exe's Properties > Details tab in Explorer.
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=version_tuple, prodvers=version_tuple),
+    kids=[
+        StringFileInfo([StringTable("040904B0", [
+            StringStruct("FileDescription", "PDF Renamer"),
+            StringStruct("ProductName", "PDF Renamer"),
+            StringStruct("FileVersion", __version__),
+            StringStruct("ProductVersion", __version__),
+            StringStruct("CompanyName", AUTHOR),
+            StringStruct("LegalCopyright", f"© {AUTHOR}. Licensed under {LICENSE_NAME}."),
+            StringStruct("OriginalFilename", "pdf-renamer-v2.exe"),
+        ])]),
+        VarFileInfo([VarStruct("Translation", [0x0409, 1200])]),
+    ],
+)
+
 
 a = Analysis(
     ['pdf-renamer-v2.py'],
@@ -37,4 +67,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon='app.ico',  # the .exe's icon in Explorer
+    version=version_info,
 )

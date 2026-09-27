@@ -1,0 +1,8 @@
+# Store text files with LF in the repo; Git converts them for your platform on checkout.
+* text=auto
+
+# Binary files: never convert
+*.ico binary
+*.png binary
+*.exe binary
+*.pdf binary
