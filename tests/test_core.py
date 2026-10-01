@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pdf_renamer_core import (  # noqa: E402
     __version__, apply_pattern, check_batch, extract_number, natural_key, process_file,
-    read_existing_metadata, sanitize_filename, target_path, unique_path,
+    read_existing_metadata, sanitize_filename, split_filename, target_path, unique_path,
 )
 
 
@@ -88,7 +88,28 @@ def test_apply_pattern_without_a_number_gives_empty_n():
     assert apply_pattern("Doc {n}", Path("readme.pdf"), pad=3) == "Doc "
 
 
-@pytest.mark.parametrize("pattern", ["{unknown}", "{n:zz}", "{0}", "{title"])
+@pytest.mark.parametrize("name, dividers, expected", [
+    ("Smith - 2024 - Report", "-", ["Smith", "2024", "Report"]),
+    ("Smith_2024-Report", "-_", ["Smith", "2024", "Report"]),
+    ("a__b", "_", ["a", "b"]),                    # empty parts are dropped
+    ("Year 9 Maths", " ", ["Year", "9", "Maths"]),
+    ("v1.2 notes", ".", ["v1", "2 notes"]),
+    ("Smith_2024", "", ["Smith_2024"]),           # no dividers: one part
+])
+def test_split_filename(name, dividers, expected):
+    assert split_filename(name, dividers) == expected
+
+
+def test_apply_pattern_name_and_parts():
+    path = Path("Smith_2024_Report.pdf")
+    assert apply_pattern("{name}", path) == "Smith_2024_Report"
+    assert apply_pattern("{part3} ({part2}) - {part1}", path, dividers="_") == "Report (2024) - Smith"
+    assert apply_pattern("{part1}|{part4}", path, dividers="_") == "Smith|"  # past the end: empty
+    assert apply_pattern("{part1}", path, dividers="") == "Smith_2024_Report"
+
+
+@pytest.mark.parametrize("pattern", ["{unknown}", "{n:zz}", "{0}", "{title", "{part0}", "{part}",
+                                     "{name.x}"])
 def test_apply_pattern_rejects_invalid_patterns(pattern):
     with pytest.raises(ValueError):
         apply_pattern(pattern, Path("scan7.pdf"), existing_title="T")

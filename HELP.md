@@ -20,8 +20,22 @@ A pattern is ordinary text with placeholders in curly braces:
 | `{n}` | The first number in the original filename, e.g. `7` from `scan7.pdf` |
 | `{title}` | The file's current value in the Title column |
 | `{author}` | The file's current value in the Author column |
+| `{name}` | The whole original filename, without `.pdf` |
+| `{part1}`, `{part2}`, ... | A piece of the original filename (see *Titles from the filename* below) |
 
 Click a placeholder button under the patterns to insert it into whichever pattern field you last clicked in.
+
+### Titles from the filename
+
+To build the title from pieces of the filename, choose where the name is divided using **Divide filename into parts at**. The default divides at a dash or an underscore. You can also pick a dash, an underscore, a space, a full stop, any of these, or **Custom**, where you type the characters to divide at (include a space to divide at spaces too).
+
+For example, `Smith_2024_Report.pdf` divided at `_` gives `{part1}` = `Smith`, `{part2}` = `2024` and `{part3}` = `Report`, so the pattern `{part3} ({part2}) - {part1}` gives `Report (2024) - Smith`.
+
+- The line under the options shows how the first file in the list is divided, so you can check which part is which.
+- Spaces around each part are removed, and empty parts are skipped, so `Smith - 2024 - Report` divided at `-` gives `Smith`, `2024` and `Report`.
+- A part number past the end gives nothing, e.g. `{part4}` is blank for a name with three parts.
+- To keep the whole filename as the title, use `{name}`.
+- Changing the divider updates every title that uses a pattern. Presets remember the divider too.
 
 **Leading zeros:** set **Pad {n} with leading zeros to** to make numbers a fixed width, e.g. 3 digits turns `7` into `007`, which keeps files in order when sorted by name. To pad differently in one pattern, write the format out in the pattern, e.g. `{n:02d}`; that takes priority over the box.
 
@@ -33,7 +47,7 @@ Characters that Windows doesn't allow in filenames (`< > : " / \ | ? *`) are rem
 
 ## Presets
 
-Presets save your title pattern, author pattern and leading-zeros setting under a name.
+Presets save your title pattern, author pattern, leading-zeros setting and filename divider under a name.
 
 - **Save as Preset...** saves the current fields. Using an existing name replaces that preset (you'll be asked first).
 - **Choose a preset** from the drop-down to fill the fields, then click **Apply to All**.
@@ -62,9 +76,11 @@ Before you run, the Status column predicts what will happen to each file:
 | **duplicate** (red) | Another file in the list would get the same name |
 | **exists** (red) | A different file already has this name |
 
-Hover over a status to see details. The Batch panel shows how many problems there are. If you click Run with problems remaining, you'll be asked whether to continue; files with problems are skipped or fail.
+Hover over a status to see details. The Batch panel shows how many problems there are of each kind. Hover over that summary for what each kind means and how to fix it, or click **Show the first one** to jump to it in the list. If you click Run with problems remaining, you'll be asked whether to continue; files with problems are skipped or fail.
 
 After a run, the Status column shows the result: **renamed**, **copied**, **skipped** or **failed**. The log has the details.
+
+**Every file says duplicate?** Some downloaded PDFs all have the same Title metadata, such as a website name, so every file would get the same name. Apply the title pattern `{name}` to start from the filename instead, or set **Settings > Starting title** to the filename before adding the files.
 
 ## Settings
 

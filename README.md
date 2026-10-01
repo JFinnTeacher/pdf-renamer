@@ -7,6 +7,7 @@ For example, `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit pa
 ## Features
 
 - **Naming patterns** with the placeholders `{n}` (first number in the filename), `{title}` and `{author}`, plus optional zero-padding for `{n}`.
+- **Titles from the filename:** `{name}` for the whole filename, or `{part1}`, `{part2}`, ... for pieces of it, divided at a dash, underscore, space, full stop or characters you choose.
 - **Title and Author patterns** that apply to every file at once, with per-file editing in the table and saved presets.
 - **Pre-run checks.** The Status column predicts each file's outcome (`ready`, `unchanged`, `suffix`, `overwrite`) and shows problems (`no title`, `duplicate`, `exists`) in red before you run.
 - **Conflict handling.** When a name is already taken, you can skip the file, add a number (`Title (2).pdf`) or overwrite.
@@ -16,6 +17,13 @@ For example, `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit pa
 - Drag and drop, subfolder scanning, light and dark themes, an exportable log, and in-app help (F1).
 
 See [HELP.md](HELP.md) for the full user guide.
+
+## What's new in 2.1.0
+
+- **Titles from the filename:** new `{name}` and `{part1}`, `{part2}`, ... placeholders. Choose where the filename is divided (dash, underscore, space, full stop, or your own characters), and a preview line shows how the first file divides. Presets remember the divider.
+- **Clearer naming problems:** the summary under Run counts each kind of problem (e.g. "68 duplicate names"), explains how to fix it when you hover over it, and has a link that jumps to the first problem.
+- **Fixed:** the Status column could end up scrolled off-screen when the Title column was wider than the window.
+- **Fixed:** a pattern like `{title.x}` crashed instead of being reported as an invalid pattern.
 
 ## Getting started
 

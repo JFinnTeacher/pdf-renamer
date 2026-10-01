@@ -13,6 +13,7 @@ Requires: pip install pypdf PySide6
 """
 
 import json
+from collections import Counter
 import platform
 import sys
 from datetime import datetime
@@ -33,8 +34,8 @@ from PySide6.QtWidgets import (
 )
 
 from pdf_renamer_core import (
-    AUTHOR, LICENSE_NAME, LICENSE_URL, REPO_URL, __version__,
-    apply_pattern, check_batch, natural_key, process_file, read_existing_metadata,
+    AUTHOR, DEFAULT_DIVIDERS, LICENSE_NAME, LICENSE_URL, REPO_URL, __version__,
+    apply_pattern, check_batch, natural_key, process_file, read_existing_metadata, split_filename,
 )
 
 
@@ -54,6 +55,19 @@ BATCH_PANEL_WIDTH = 340
 DEFAULT_COLUMN_WIDTHS =(180, 150, 200, 150, 140, 90)  # in COLUMNS order
 TITLE_MIN_WIDTH = 200
 PROBLEM_STATUSES = ("no title", "duplicate", "exists")
+# Problem status -> (name in the summary under Run, plural, explanation and fix for its tooltip).
+PROBLEM_LABELS = {
+    "no title": ("missing title", "missing titles",
+                 "the title is empty, or has only characters a filename can't use. "
+                 "Type a title or apply a title pattern."),
+    "duplicate": ("duplicate name", "duplicate names",
+                  "two or more files would get the same name. This often happens when the "
+                  "PDFs share the same Title metadata (e.g. a website name). Try a title "
+                  "pattern such as {name} or {n}, or set Settings > Starting title to the filename."),
+    "exists": ("name already taken", "names already taken",
+               "a different file already has this name. Change the title, or choose "
+               "Settings > If the new name is taken: Add a number."),
+}
 # Status text -> theme color key; anything unlisted uses "muted".
 STATUS_COLORS = {
     "renamed": "renamed", "copied": "renamed", "skipped": "skipped", "failed": "failed",
@@ -86,6 +100,26 @@ PREF_CHOICES = {
                       ("blank", "Blank")),
     "theme": (("system", "Follow system"), ("light", "Light"), ("dark", "Dark")),
 }
+# (dividers, label) choices for splitting a filename into {part1}, {part2}, ...;
+# None is "Custom", which takes its characters from a text box.
+DIVIDER_CHOICES = (
+    ("-_", "- or _  (dash or underscore)"),
+    ("-", "-  (dash)"),
+    ("_", "_  (underscore)"),
+    (" ", "Space"),
+    (".", ".  (full stop)"),
+    ("-_. ", "Any of - _ . or space"),
+    (None, "Custom:"),
+)
+PLACEHOLDERS = ("{n}", "{title}", "{author}", "{name}", "{part1}", "{part2}", "{part3}")
+PLACEHOLDER_TIPS = {
+    "{n}": "The first number in the filename",
+    "{title}": "The file's current Title",
+    "{author}": "The file's current Author",
+    "{name}": "The whole filename, without .pdf",
+}
+SAMPLE_FILE = Path("Chapter_007_Introduction.pdf")  # previewed when the list is empty
+MAX_PREVIEW_PARTS = 6
 
 THEMES = {
     "light": {
@@ -432,6 +466,7 @@ class App(QMainWindow):
         self.title_pattern_edit.setText(s.value("patterns/title", "", type=str))
         self.author_pattern_edit.setText(s.value("patterns/author", "", type=str))
         self.pad_spin.setValue(s.value("patterns/pad_digits", 0, type=int))
+        self._set_dividers(s.value("patterns/dividers", DEFAULT_DIVIDERS, type=str))
         self.last_dir = s.value("paths/last_dir", "", type=str)
         self._load_presets()
 
@@ -446,6 +481,7 @@ class App(QMainWindow):
         s.setValue("patterns/title", self.title_pattern_edit.text())
         s.setValue("patterns/author", self.author_pattern_edit.text())
         s.setValue("patterns/pad_digits", self.pad_spin.value())
+        s.setValue("patterns/dividers", self._dividers())
         s.setValue("paths/last_dir", self.last_dir)
         s.sync()
 
@@ -520,7 +556,7 @@ class App(QMainWindow):
         self.preset_combo.setToolTip("Load a saved set of patterns into the fields below")
         self.preset_combo.activated.connect(self._on_preset_chosen)
         save_preset = QPushButton("Save as Preset...")
-        save_preset.setToolTip("Save the current title pattern, author pattern and padding under a name")
+        save_preset.setToolTip("Save the current patterns, padding and filename dividers under a name")
         save_preset.clicked.connect(self.save_preset)
         self.delete_preset_button = QPushButton("Delete")
         self.delete_preset_button.setToolTip("Delete the selected preset")
@@ -548,14 +584,20 @@ class App(QMainWindow):
         chips = QHBoxLayout()
         chips.setSpacing(4)
         chips.addWidget(QLabel("Insert into focused field:"))
-        for placeholder in ("{n}", "{title}", "{author}"):
+        for placeholder in PLACEHOLDERS:
             chip = QPushButton(placeholder)
             chip.setObjectName("Chip")
             chip.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # keep focus in the pattern field
+            chip.setToolTip(PLACEHOLDER_TIPS.get(
+                placeholder, "A piece of the filename, divided at the characters chosen below"))
             chip.clicked.connect(lambda _=False, p=placeholder: self._insert_placeholder(p))
             chips.addWidget(chip)
-        chips.addSpacing(24)
-        chips.addWidget(QLabel("Pad {n} with leading zeros to:"))
+        chips.addStretch()
+        grid.addLayout(chips, 6, 0, 1, 3)
+
+        options = QHBoxLayout()
+        options.setSpacing(4)
+        options.addWidget(QLabel("Pad {n} with leading zeros to:"))
         self.pad_spin = QSpinBox()
         self.pad_spin.setRange(0, 10)
         self.pad_spin.setSpecialValueText("Off")
@@ -565,10 +607,28 @@ class App(QMainWindow):
         self.pad_spin.setMinimumSize(100, 28)
         self.pad_spin.setToolTip("Zero-pad the number from the filename, e.g. 3 digits: 7 → 007.\n"
                                  "An explicit format like {n:02d} in a pattern overrides this.")
-        self.pad_spin.valueChanged.connect(self._on_pad_changed)
-        chips.addWidget(self.pad_spin)
-        chips.addStretch()
-        grid.addLayout(chips, 6, 0, 1, 3)
+        self.pad_spin.valueChanged.connect(self._reapply_patterns)
+        options.addWidget(self.pad_spin)
+        options.addSpacing(24)
+        options.addWidget(QLabel("Divide filename into parts at:"))
+        self.divider_combo = QComboBox()
+        for value, label in DIVIDER_CHOICES:
+            self.divider_combo.addItem(label, value)
+        self.divider_combo.setToolTip("Where the filename is split into {part1}, {part2}, ...\n"
+                                      "e.g. dividing Smith_2024_Report at _ gives Smith, 2024, Report.")
+        options.addWidget(self.divider_combo)
+        self.divider_edit = QLineEdit()
+        self.divider_edit.setPlaceholderText("e.g. -,")
+        self.divider_edit.setToolTip("Divide at any of these characters (include a space to divide at spaces)")
+        self.divider_edit.setFixedWidth(90)
+        self.divider_edit.setEnabled(False)
+        options.addWidget(self.divider_edit)
+        options.addStretch()
+        grid.addLayout(options, 7, 0, 1, 3)
+        self.parts_sample = QLabel()
+        self.parts_sample.setObjectName("Sample")
+        self.parts_sample.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        grid.addWidget(self.parts_sample, 8, 0, 1, 3)
 
         self._active_pattern_edit = self.title_pattern_edit
         QApplication.instance().focusChanged.connect(self._on_focus_changed)
@@ -578,6 +638,11 @@ class App(QMainWindow):
         self.title_pattern_edit.textChanged.connect(self._sync_preset_selection)
         self.author_pattern_edit.textChanged.connect(self._sync_preset_selection)
         self.pad_spin.valueChanged.connect(self._sync_preset_selection)
+        # Connected after the sample labels exist, since these re-run the preview.
+        self.divider_combo.currentIndexChanged.connect(self._on_divider_choice_changed)
+        self.divider_edit.textChanged.connect(self._reapply_patterns)
+        self.divider_combo.currentIndexChanged.connect(self._sync_preset_selection)
+        self.divider_edit.textChanged.connect(self._sync_preset_selection)
 
         # Batch panel: sits beside the patterns, holding everything that acts on the whole batch
         batch_box = QGroupBox("Batch")
@@ -616,6 +681,8 @@ class App(QMainWindow):
         batch.addWidget(self.progress_label)
         self.issue_label = QLabel()
         self.issue_label.setObjectName("Issues")
+        self.issue_label.setWordWrap(True)
+        self.issue_label.linkActivated.connect(lambda _: self.show_first_problem())
         batch.addWidget(self.issue_label)
         self._set_progress("Ready")
 
@@ -815,16 +882,25 @@ class App(QMainWindow):
     def _on_section_resized(self, index, _old, new):
         if self._fitting:
             return
-        if index == COL["title"]:
-            # A manual drag on Title sets the width it should keep from now on.
+        dragged_title = index == COL["title"]
+        if dragged_title:
+            # A manual drag on Title sets the width it should keep, for now.
             self.title_width = max(TITLE_MIN_WIDTH, new)
-        self._fit_title_column()
+        self._fit_title_column(keep_title=dragged_title)
         self._layout_save_timer.start()
 
-    def _fit_title_column(self):
+    def _fit_title_column(self, keep_title=False):
+        """
+        Make Title fill the table's spare width. A Title dragged wider than fits is
+        kept until the window or another column changes size; then it shrinks back
+        (down to TITLE_MIN_WIDTH), so Status doesn't end up scrolled out of view.
+        """
         header = self.table.horizontalHeader()
         others = sum(header.sectionSize(i) for i in range(len(COLUMNS)) if i != COL["title"])
-        width = max(self.title_width, self.table.viewport().width() - others)
+        available = self.table.viewport().width() - others
+        if not keep_title:
+            self.title_width = max(TITLE_MIN_WIDTH, min(self.title_width, available))
+        width = max(self.title_width, available)
         if header.sectionSize(COL["title"]) != width:
             self._fitting = True
             try:
@@ -906,6 +982,7 @@ class App(QMainWindow):
             (QPalette.ColorRole.Text, "text"), (QPalette.ColorRole.Button, "button"),
             (QPalette.ColorRole.ButtonText, "text"), (QPalette.ColorRole.PlaceholderText, "muted"),
             (QPalette.ColorRole.Highlight, "accent"), (QPalette.ColorRole.HighlightedText, "accent_text"),
+            (QPalette.ColorRole.Link, "accent"),
             (QPalette.ColorRole.ToolTipBase, "base"), (QPalette.ColorRole.ToolTipText, "text"),
         ):
             palette.setColor(role, QColor(c[key]))
@@ -940,7 +1017,7 @@ class App(QMainWindow):
         rows = range(self.table.rowCount())
         results = check_batch([(self._path(r), self._cell(r, "title")) for r in rows],
                               on_conflict=self.prefs["on_conflict"], output_dir=self._output_dir())
-        problems = 0
+        kinds = Counter()
         self._updating = True
         try:
             for row, (status, message) in zip(rows, results):
@@ -949,18 +1026,44 @@ class App(QMainWindow):
                 item.setToolTip(message)
                 self.table.item(row, COL["title"]).setToolTip(
                     message if status in PROBLEM_STATUSES else "")
-                problems += status in PROBLEM_STATUSES
+                if status in PROBLEM_STATUSES:
+                    kinds[status] += 1
         finally:
             self._updating = False
         for row in rows:
             self._color_status(row)
-        self.issue_label.setText(
-            f"⚠ {problems} naming problem{'s' if problems != 1 else ''}" if problems else "")
-        self.issue_label.setToolTip("Hover over a red status for details." if problems else "")
+        problems = sum(kinds.values())
+        self._show_problem_summary(kinds)
         count = self.table.rowCount()
         self.file_count_label.setText(f"{count} file{'s' if count != 1 else ''}" if count else
                                       "none yet — add a folder or files, or drop PDFs here")
         return problems
+
+    def _show_problem_summary(self, kinds):
+        """Count each kind of problem under Run, with a link to the first problem row."""
+        problems = sum(kinds.values())
+        if not problems:
+            self.issue_label.setText("")
+            self.issue_label.setToolTip("")
+            return
+        breakdown = ", ".join(f"{kinds[s]} {PROBLEM_LABELS[s][0 if kinds[s] == 1 else 1]}"
+                              for s in PROBLEM_STATUSES if kinds[s])
+        self.issue_label.setText(
+            f"⚠ {problems} naming problem{'s' if problems != 1 else ''}: {breakdown}<br>"
+            '<a href="show">Show the first one</a>')
+        self.issue_label.setToolTip("<br><br>".join(
+            f"<b>{PROBLEM_LABELS[s][1].capitalize()}:</b> {PROBLEM_LABELS[s][2]}"
+            for s in PROBLEM_STATUSES if kinds[s])
+            + "<br><br>Hover over a red status in the file list for details.")
+
+    def show_first_problem(self):
+        """Select the first row with a naming problem and scroll its Status into view."""
+        for row in range(self.table.rowCount()):
+            if self._cell(row, "status") in PROBLEM_STATUSES:
+                self.table.selectRow(row)
+                self.table.scrollToItem(self.table.item(row, COL["status"]))
+                self.table.setFocus()
+                return
 
     def _confirm_run_with_problems(self, problems):
         answer = QMessageBox.warning(
@@ -1006,12 +1109,35 @@ class App(QMainWindow):
         edit.insert(placeholder)
         edit.setFocus()
 
+    # -- filename dividers ------------------------------------------------------------
+
+    def _dividers(self):
+        """The characters the filename is divided at for {part1}, {part2}, ..."""
+        value = self.divider_combo.currentData()
+        return self.divider_edit.text() if value is None else value
+
+    def _set_dividers(self, dividers):
+        """Select the choice matching `dividers`, or Custom with them filled in."""
+        index = self.divider_combo.findData(dividers)
+        if index < 0:
+            index = self.divider_combo.findData(None)
+            self.divider_edit.setText(dividers)
+        self.divider_combo.setCurrentIndex(index)
+
+    def _on_divider_choice_changed(self):
+        custom = self.divider_combo.currentData() is None
+        self.divider_edit.setEnabled(custom)
+        if custom and self.divider_combo.hasFocus():  # chosen by the user, not loaded
+            self.divider_edit.setFocus()
+        self._reapply_patterns()
+
     # -- presets --------------------------------------------------------------------
 
     def _current_patterns(self):
         return {"title": self.title_pattern_edit.text(),
                 "author": self.author_pattern_edit.text(),
-                "pad": self.pad_spin.value()}
+                "pad": self.pad_spin.value(),
+                "dividers": self._dividers()}
 
     def _matching_preset(self):
         """Name of the preset identical to the current fields, or None."""
@@ -1047,6 +1173,7 @@ class App(QMainWindow):
             self.title_pattern_edit.setText(preset["title"])
             self.author_pattern_edit.setText(preset["author"])
             self.pad_spin.setValue(preset["pad"])
+            self._set_dividers(preset["dividers"])
         finally:
             self._loading_preset = False
 
@@ -1104,7 +1231,8 @@ class App(QMainWindow):
             if isinstance(p, dict):
                 self.presets[str(name)] = {"title": str(p.get("title", "")),
                                            "author": str(p.get("author", "")),
-                                           "pad": max(0, min(10, int(p.get("pad", 0) or 0)))}
+                                           "pad": max(0, min(10, int(p.get("pad", 0) or 0))),
+                                           "dividers": str(p.get("dividers", DEFAULT_DIVIDERS))}
         self._refresh_preset_combo()
 
     def _update_sample(self):
@@ -1113,21 +1241,27 @@ class App(QMainWindow):
             title, author = self._cell(0, "title"), self._cell(0, "author")
             source = path.name
         else:
-            path, title, author = Path("example007.pdf"), "Sample Title", "Sample Author"
-            source = "example007.pdf"
+            path, title, author = SAMPLE_FILE, "Sample Title", "Sample Author"
+            source = SAMPLE_FILE.name
 
         def preview(pattern):
             if not pattern:
                 return ""
             try:
                 result = apply_pattern(pattern, path, existing_title=title, existing_author=author,
-                                       pad=self.pad_spin.value())
+                                       pad=self.pad_spin.value(), dividers=self._dividers())
             except ValueError as e:
                 return f"({e})"
             return f"{source}  →  {result}"
 
         self.title_sample.setText(preview(self.title_pattern_edit.text()))
         self.author_sample.setText(preview(self.author_pattern_edit.text()))
+
+        parts = split_filename(path.stem, self._dividers())
+        shown = "   ".join(f"{{part{i}}} = {part}" for i, part in enumerate(parts[:MAX_PREVIEW_PARTS], 1))
+        if len(parts) > MAX_PREVIEW_PARTS:
+            shown += f"   … ({len(parts)} parts)"
+        self.parts_sample.setText(f"Parts of {path.stem}:   {shown}")
 
     # -- reordering / removal -----------------------------------------------------
 
@@ -1259,6 +1393,7 @@ class App(QMainWindow):
         self.title_pattern_edit.clear()
         self.author_pattern_edit.clear()
         self.pad_spin.setValue(0)
+        self._set_dividers(DEFAULT_DIVIDERS)
         self.log_text.clear()
 
     # -- pattern application ------------------------------------------------------
@@ -1287,14 +1422,14 @@ class App(QMainWindow):
         try:
             result = apply_pattern(pattern, path, existing_title=self._cell(row, "title"),
                                    existing_author=self._cell(row, "author"),
-                                   pad=self.pad_spin.value())
+                                   pad=self.pad_spin.value(), dividers=self._dividers())
         except ValueError as e:
             self.log(f"{path.name}: {e}")
             return
         self._set_cell(row, target_col, result)
 
-    def _on_pad_changed(self):
-        """Re-apply every row's patterns so titles pick up the new padding."""
+    def _reapply_patterns(self):
+        """Re-apply every row's patterns so titles pick up new padding or dividers."""
         for row in range(self.table.rowCount()):
             self._recompute(row, "title_pattern", "title")
             self._recompute(row, "author_pattern", "author")

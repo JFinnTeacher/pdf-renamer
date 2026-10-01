@@ -15,8 +15,8 @@ Example: `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit paddin
 | `pdf_renamer_core.py` | All renaming logic with no GUI dependencies: patterns, pre-run checks, file processing. Safe to import and test on its own. |
 | `pdf-renamer-v2.py` | The PySide6 (Qt) GUI. Run this to launch the app. |
 | `pdf-renamer.py` | The original tkinter version, kept for reference. Not maintained. |
-| `tests/test_core.py` | 31 pytest tests for the core logic |
-| `tests/test_gui_smoke.py` | 3 headless GUI tests: a full batch end to end, presets, and the About window |
+| `tests/test_core.py` | 41 pytest tests for the core logic |
+| `tests/test_gui_smoke.py` | 6 headless GUI tests: a full batch end to end, presets, titles from filename parts, problem summary, Title column fitting, and the About window |
 | `README.md` | GitHub landing page: overview, features, setup and development commands |
 | `HELP.md` | User help, shown in the app's Help window (F1). Edit this file to update the in-app help. |
 | `pdf-renamer-v2.spec` | PyInstaller build definition (bundles `app.ico` and `HELP.md`) |
@@ -31,7 +31,7 @@ Example: `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit paddin
 pip install -r requirements-dev.txt
 
 python pdf-renamer-v2.py            # run the app
-python -m pytest tests              # run all 34 tests (the GUI tests run headless)
+python -m pytest tests              # run all 47 tests (the GUI tests run headless)
 pyinstaller pdf-renamer-v2.spec     # build dist/pdf-renamer-v2.exe (single file, ~50 MB);
                                     # rename to PDF-Renamer-<version>.exe for a GitHub Release
 python make_icon.py                 # only after editing icon.svg
@@ -43,8 +43,9 @@ Developed and tested on Python 3.14 with PySide6 6.11 and pypdf 6; minimums are 
 
 **Renaming**
 - Placeholders `{n}` (first number in the filename), `{title}` and `{author}`, with an optional zero-padding width for `{n}`. An explicit format like `{n:03d}` overrides the padding.
+- **Titles from the filename:** `{name}` (the whole stem) and `{part1}`, `{part2}`, ... (pieces of the stem). **Divide filename into parts at** picks the dividers: dash or underscore (default), dash, underscore, space, full stop, any of those, or custom characters. Parts are stripped and empty ones dropped; a part past the end is blank. A preview line shows how the first file divides. Presets and settings store the dividers.
 - Title and Author patterns, applied to all files at once or edited per file in the table.
-- Saved **presets** of title pattern, author pattern and padding.
+- Saved **presets** of title pattern, author pattern, padding and filename dividers.
 - Invalid filename characters are removed from the filename only; the Title metadata keeps them.
 - Existing metadata (Subject, Keywords, dates, and Author when left blank) is preserved.
 
@@ -67,7 +68,7 @@ Developed and tested on Python 3.14 with PySide6 6.11 and pypdf 6; minimums are 
 
 ## Versioning
 
-The version is defined once, as `__version__` in `pdf_renamer_core.py`, using `MAJOR.MINOR.PATCH` (semantic versioning). It is currently **2.0.0**: the tkinter app counts as 1.x, and the PySide6 rewrite is 2.0.0.
+The version is defined once, as `__version__` in `pdf_renamer_core.py`, using `MAJOR.MINOR.PATCH` (semantic versioning). It is currently **2.1.0**: the tkinter app counts as 1.x, the PySide6 rewrite is 2.0.0, and 2.1.0 adds titles from the filename and clearer naming problems.
 
 It appears in the main window title, at the bottom of the Help window, and in the `.exe`'s Properties > Details tab (`pdf-renamer-v2.spec` reads it at build time). To release, bump the number and tag the commit to match the existing `V2.0.0` style (e.g. `V2.1.0`). Bump PATCH for fixes, MINOR for new features, and MAJOR for breaking changes.
 
@@ -91,7 +92,8 @@ Licensed under CC BY-NC-SA 4.0 (see `LICENSE.md`); author Jim Finn. The app note
 | `dd42935` | Rewrite in PySide6: pre-run checks, conflict modes, output folder, settings, presets, themes, icon, help |
 | `dd3c8d3` | Core logic split into `pdf_renamer_core.py`; pytest suite added. The tests found and fixed a bug: renaming wiped all existing metadata except Title/Author. |
 | `f9136c1` (tag `V2.0.0`, GitHub Release 2.0.0) | `.gitignore` now covers `dist/`, `__pycache__/`, `*.pyc` and virtual environments. Added `README.md` (seeded from this summary and `HELP.md`) and this `PROJECT_SUMMARY.md`. Version **2.0.0** introduced (see Versioning). Added an **About** button and window, licensed the project under **CC BY-NC-SA 4.0** (`LICENSE.md`), and stamped the author and licence into the `.exe`'s file properties. Built `dist/PDF-Renamer-2.0.0.exe` (48.2 MB, SHA-256 `083E8814…282532E`) for the v2.0.0 GitHub Release. Added `.gitattributes` (`* text=auto`, binaries marked) so line endings are normalised. |
-| *(next commit)* | Removed the old tkinter build `dist/PDF Renamer.exe` from the repo (builds are now published as GitHub Release assets). |
+| `c2598af` | Removed the old tkinter build `dist/PDF Renamer.exe` from the repo (builds are now published as GitHub Release assets). |
+| *(next commit)* (to tag `V2.1.0`) | Version **2.1.0**. **Titles from the filename:** new `{name}` and `{part1}`, `{part2}`, ... placeholders, with a **Divide filename into parts at** option (preset choices or custom characters) and a parts preview line. `split_filename()` added to the core, and `apply_pattern()` takes `dividers`. Dividers are saved in presets (older presets default to dash or underscore) and settings. Fixed: a pattern like `{title.x}` crashed instead of reporting an invalid pattern. **Clearer naming problems:** the summary under Run now counts each kind (e.g. "68 duplicate names"), its tooltip explains each kind and how to fix it, and a **Show the first one** link selects that row and scrolls Status into view. Fixed: a Title column dragged (or saved) wider than the window pushed Status off-screen; Title now shrinks back to fit whenever the window or another column changes size. 13 new tests (47 total). |
 
 The history was carried over from `Coding-Projects` (`pdf renamer/` folder) using `git subtree split`, so the hashes differ from the original repo.
 

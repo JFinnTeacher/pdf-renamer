@@ -13,7 +13,7 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 # The app's version, shown in the GUI and stamped into the .exe by pdf-renamer-v2.spec.
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 # Shown in the About window and the .exe's file properties.
 AUTHOR = "Jim Finn"
@@ -22,6 +22,10 @@ LICENSE_NAME = "CC BY-NC-SA 4.0"
 LICENSE_URL = "https://creativecommons.org/licenses/by-nc-sa/4.0/"
 
 INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*]')
+
+# Characters that divide a filename into {part1}, {part2}, ... by default.
+DEFAULT_DIVIDERS = "-_"
+PART_PLACEHOLDER = re.compile(r"part(\d+)")
 
 
 def extract_number(text):
@@ -59,7 +63,37 @@ class _PaddedNumber(int):
         return format(int(self), spec)
 
 
-def apply_pattern(pattern, file_path, existing_title="", existing_author="", pad=0):
+def split_filename(name, dividers=DEFAULT_DIVIDERS):
+    """
+    Split `name` at any of the characters in `dividers` (a space counts too, if
+    included). Parts are stripped of surrounding spaces and empty parts dropped,
+    so "Smith - 2024 - Report" divided at "-" gives ["Smith", "2024", "Report"].
+    No dividers gives the whole name as one part.
+    """
+    if not dividers:
+        parts = [name]
+    else:
+        parts = re.split(f"[{re.escape(dividers)}]", name)
+    return [p.strip() for p in parts if p.strip()]
+
+
+class _Placeholders(dict):
+    """Pattern values, resolving {part1}, {part2}, ... on demand ('' past the last part)."""
+
+    def __init__(self, parts, **values):
+        super().__init__(**values)
+        self.parts = parts
+
+    def __missing__(self, key):
+        match = PART_PLACEHOLDER.fullmatch(key)
+        if not match or int(match.group(1)) < 1:
+            raise KeyError(key)
+        index = int(match.group(1)) - 1
+        return self.parts[index] if index < len(self.parts) else ""
+
+
+def apply_pattern(pattern, file_path, existing_title="", existing_author="", pad=0,
+                  dividers=DEFAULT_DIVIDERS):
     """
     Substitute placeholders in `pattern`:
       {n}      - digits extracted from the file's original name, zero-padded
@@ -67,15 +101,21 @@ def apply_pattern(pattern, file_path, existing_title="", existing_author="", pad
                  {n:03d} overrides `pad`
       {title}  - `existing_title` (typed manually or pulled from PDF metadata)
       {author} - `existing_author` (typed manually or pulled from PDF metadata)
+      {name}   - the file's original name without .pdf
+      {part1}, {part2}, ... - pieces of the name, divided at any character in
+                 `dividers` (see split_filename); '' if there aren't that many
 
     Returns the resulting string. Raises ValueError if the pattern is invalid
     (e.g. an unknown placeholder, or a format spec that doesn't fit the value).
     """
-    number = extract_number(Path(file_path).stem)
+    stem = Path(file_path).stem
+    number = extract_number(stem)
+    values = _Placeholders(split_filename(stem, dividers),
+                           n=_PaddedNumber(number, pad) if number is not None else "",
+                           title=existing_title, author=existing_author, name=stem)
     try:
-        return pattern.format(n=_PaddedNumber(number, pad) if number is not None else "",
-                               title=existing_title, author=existing_author)
-    except (KeyError, ValueError, IndexError) as e:
+        return pattern.format_map(values)
+    except (KeyError, ValueError, IndexError, TypeError, AttributeError) as e:
         raise ValueError(f"invalid pattern ({e})")
 
 
