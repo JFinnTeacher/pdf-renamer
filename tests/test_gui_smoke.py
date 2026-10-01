@@ -67,6 +67,24 @@ def test_batch_end_to_end(window, tmp_path):
     assert meta(folder / "Doc 10.pdf")[0] == "Doc 10"
 
 
+def test_set_metadata_without_renaming(window, tmp_path):
+    folder = tmp_path / "pdfs"
+    folder.mkdir()
+    make_pdf(folder / "scan1.pdf")
+    make_pdf(folder / "scan2.pdf")
+    window._add_folder(folder)
+    window.title_pattern_edit.setText("Same Title")
+    window.apply_batch_title_pattern()
+    assert cells(window, "status") == ["duplicate", "duplicate"]
+
+    window.rename_check.setChecked(False)
+    assert cells(window, "status") == ["unchanged", "unchanged"]
+    window.run_batch()
+    assert cells(window, "status") == ["updated", "updated"]
+    assert names(folder) == ["scan1.pdf", "scan2.pdf"]
+    assert meta(folder / "scan2.pdf")[0] == "Same Title"
+
+
 def test_presets_round_trip(window, gui, monkeypatch):
     window.title_pattern_edit.setText("Chapter {n}")
     window.pad_spin.setValue(3)

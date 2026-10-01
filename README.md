@@ -9,6 +9,7 @@ For example, `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit pa
 - **Naming patterns** with the placeholders `{n}` (first number in the filename), `{title}` and `{author}`, plus optional zero-padding for `{n}`.
 - **Titles from the filename:** `{name}` for the whole filename, or `{part1}`, `{part2}`, ... for pieces of it, divided at a dash, underscore, space, full stop or characters you choose.
 - **Title and Author patterns** that apply to every file at once, with per-file editing in the table and saved presets.
+- **Metadata-only mode:** untick **Rename files to match their Title** to set the Title and Author without renaming anything.
 - **Pre-run checks.** The Status column predicts each file's outcome (`ready`, `unchanged`, `suffix`, `overwrite`) and shows problems (`no title`, `duplicate`, `exists`) in red before you run.
 - **Conflict handling.** When a name is already taken, you can skip the file, add a number (`Title (2).pdf`) or overwrite.
 - **Output folder mode** writes renamed copies and leaves the originals alone.
@@ -17,6 +18,11 @@ For example, `scan7.pdf` with the pattern `Chapter {n} - {title}` and 2-digit pa
 - Drag and drop, subfolder scanning, light and dark themes, an exportable log, and in-app help (F1).
 
 See [HELP.md](HELP.md) for the full user guide.
+
+## What's new in 2.1.1
+
+- **Set the Title and Author without renaming:** untick **Rename files to match their Title** in the Batch panel to keep every filename and only update the metadata.
+- **Fixed:** a file whose name already matched its title was skipped, so its Title and Author were never written. It's now updated in place.
 
 ## What's new in 2.1.0
 

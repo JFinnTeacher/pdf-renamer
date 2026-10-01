@@ -180,10 +180,38 @@ def test_process_file_preserves_other_metadata(tmp_path):
         ("New", "Jim", "Taxes", "2024, receipts")
 
 
-def test_process_file_skips_when_already_named(tmp_path):
+def test_process_file_updates_metadata_when_already_named(tmp_path):
     src = make_pdf(tmp_path / "Doc.pdf")
-    assert process_file(src, "Doc")["status"] == "skipped"
+    result = process_file(src, "Doc", author="Jim")
+    assert result["status"] == "updated"
     assert names(tmp_path) == ["Doc.pdf"]
+    assert meta(src) == ("Doc", "Jim")
+
+
+def test_process_file_without_renaming(tmp_path):
+    src = make_pdf(tmp_path / "scan1.pdf", title="old")
+    result = process_file(src, "Chapter 1", author="Jim", rename=False)
+    assert result["status"] == "updated"
+    assert names(tmp_path) == ["scan1.pdf"]
+    assert meta(src) == ("Chapter 1", "Jim")
+
+
+def test_process_file_without_renaming_to_output_folder(tmp_path):
+    src = make_pdf(tmp_path / "scan1.pdf", title="old")
+    out = tmp_path / "out"
+    out.mkdir()
+    result = process_file(src, "Chapter 1", rename=False, output_dir=out)
+    assert result["status"] == "copied"
+    assert names(out) == ["scan1.pdf"]
+    assert meta(out / "scan1.pdf")[0] == "Chapter 1"
+    assert meta(src)[0] == "old"  # original kept as it was
+
+
+def test_check_batch_without_renaming(tmp_path):
+    a = make_pdf(tmp_path / "a.pdf")
+    b = make_pdf(tmp_path / "b.pdf")
+    # Same title on both is fine when the names don't change.
+    assert [s for s, _ in check_batch([(a, "Doc"), (b, "Doc"), (b, "")], rename=False)] ==         ["unchanged", "unchanged", "no title"]
 
 
 def test_process_file_skip_mode_leaves_both_files_untouched(tmp_path):

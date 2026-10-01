@@ -11,6 +11,12 @@ PDF Renamer renames a batch of PDF files and writes a **Title** (and optionally 
 
 Each file is renamed to its new title plus `.pdf`, and the new title is written into the PDF's Title metadata.
 
+### Setting the Title and Author without renaming
+
+To change only the metadata and keep every filename as it is, untick **Rename files to match their Title** in the Batch panel before you click Run. The Title and Author columns are still written into each PDF, but no file is renamed. Files can then share the same title without being flagged as duplicates. The setting is remembered.
+
+A file whose name already matches its title also has its Title and Author updated, even when renaming is switched on.
+
 ## Naming patterns
 
 A pattern is ordinary text with placeholders in curly braces:
@@ -69,7 +75,7 @@ Before you run, the Status column predicts what will happen to each file:
 | Status | Meaning |
 |---|---|
 | ready | Will be renamed as shown |
-| unchanged | The file already has this name, so it will be skipped |
+| unchanged | The file keeps its name; only its Title and Author metadata are updated |
 | suffix | The name is taken, so a number will be added, e.g. `Title (2).pdf` |
 | overwrite | An existing file with this name will be replaced |
 | **no title** (red) | The title is empty, or has only characters that can't be used in a filename |
@@ -78,7 +84,7 @@ Before you run, the Status column predicts what will happen to each file:
 
 Hover over a status to see details. The Batch panel shows how many problems there are of each kind. Hover over that summary for what each kind means and how to fix it, or click **Show the first one** to jump to it in the list. If you click Run with problems remaining, you'll be asked whether to continue; files with problems are skipped or fail.
 
-After a run, the Status column shows the result: **renamed**, **copied**, **skipped** or **failed**. The log has the details.
+After a run, the Status column shows the result: **renamed**, **copied**, **updated** (metadata changed, name kept), **skipped** or **failed**. The log has the details.
 
 **Every file says duplicate?** Some downloaded PDFs all have the same Title metadata, such as a website name, so every file would get the same name. Apply the title pattern `{name}` to start from the filename instead, or set **Settings > Starting title** to the filename before adding the files.
 

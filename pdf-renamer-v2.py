@@ -70,13 +70,15 @@ PROBLEM_LABELS = {
 }
 # Status text -> theme color key; anything unlisted uses "muted".
 STATUS_COLORS = {
-    "renamed": "renamed", "copied": "renamed", "skipped": "skipped", "failed": "failed",
+    "renamed": "renamed", "copied": "renamed", "updated": "renamed",
+    "skipped": "skipped", "failed": "failed",
     "unchanged": "skipped", "suffix": "skipped", "overwrite": "skipped",
     **{s: "failed" for s in PROBLEM_STATUSES},
 }
 
 # User preferences edited in the Settings dialog: key -> default.
 DEFAULT_PREFS = {
+    "rename_files": True,         # False sets Title/Author only (the Batch panel checkbox)
     "on_conflict": "skip",        # skip | suffix | overwrite
     "output_mode": "in_place",    # in_place | copy
     "output_dir": "",             # used when output_mode == "copy"
@@ -468,6 +470,7 @@ class App(QMainWindow):
         self.pad_spin.setValue(s.value("patterns/pad_digits", 0, type=int))
         self._set_dividers(s.value("patterns/dividers", DEFAULT_DIVIDERS, type=str))
         self.last_dir = s.value("paths/last_dir", "", type=str)
+        self.rename_check.setChecked(self.prefs["rename_files"])
         self._load_presets()
 
     def _save_settings(self):
@@ -663,12 +666,18 @@ class App(QMainWindow):
             btn.clicked.connect(slot)
             batch_buttons.addWidget(btn, i // 2, i % 2)
         batch.addLayout(batch_buttons)
+        self.rename_check = QCheckBox("Rename files to match their Title")
+        self.rename_check.setChecked(True)
+        self.rename_check.setToolTip(
+            "Untick to set only the Title and Author metadata, keeping each file's current name.")
+        self.rename_check.toggled.connect(self._on_rename_toggled)
+        batch.addWidget(self.rename_check)
         batch.addStretch()
         self.run_button = QPushButton("Run")
         self.run_button.setObjectName("Accent")
         self.run_button.setMinimumHeight(40)
-        self.run_button.setToolTip("Rename all files (Ctrl+Enter)")
         self.run_button.clicked.connect(self.run_batch)
+        self._update_run_tooltip()
         batch.addWidget(self.run_button)
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
@@ -946,10 +955,19 @@ class App(QMainWindow):
         dialog = SettingsDialog(self.prefs, self, on_reset_columns=self.reset_column_widths)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
-        self.prefs = dialog.values()
+        self.prefs.update(dialog.values())
         self._save_settings()
         self.apply_theme()
         self._validate()
+
+    def _on_rename_toggled(self, checked):
+        self.prefs["rename_files"] = checked
+        self._update_run_tooltip()
+        self._validate()
+
+    def _update_run_tooltip(self):
+        action = "Rename all files" if self.prefs["rename_files"] else "Set Title and Author on all files"
+        self.run_button.setToolTip(f"{action} (Ctrl+Enter)")
 
     def _output_dir(self):
         """Folder renamed copies go to, or None when renaming in place."""
@@ -1016,7 +1034,8 @@ class App(QMainWindow):
         """Recompute every row's predicted outcome and summarise any problems."""
         rows = range(self.table.rowCount())
         results = check_batch([(self._path(r), self._cell(r, "title")) for r in rows],
-                              on_conflict=self.prefs["on_conflict"], output_dir=self._output_dir())
+                              on_conflict=self.prefs["on_conflict"], output_dir=self._output_dir(),
+                              rename=self.prefs["rename_files"])
         kinds = Counter()
         self._updating = True
         try:
@@ -1462,19 +1481,20 @@ class App(QMainWindow):
 
         output_dir = self._output_dir()
         on_conflict = self.prefs["on_conflict"]
+        rename = self.prefs["rename_files"]
         if output_dir is not None:
             try:
                 output_dir.mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 self.log(f"Can't create output folder {output_dir}: {e}")
                 return
-            self.log(f"Saving renamed copies to {output_dir}")
+            self.log(f"Saving {'renamed ' if rename else ''}copies to {output_dir}")
 
         self.run_button.setEnabled(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.progress_bar.setRange(0, total)
         self.progress_bar.setValue(0)
-        counts = {"renamed": 0, "copied": 0, "skipped": 0, "failed": 0}
+        counts = {"renamed": 0, "copied": 0, "updated": 0, "skipped": 0, "failed": 0}
 
         try:
             for row in range(total):
@@ -1490,7 +1510,8 @@ class App(QMainWindow):
                     self.log(f"{path.name}: no title set, skipping")
                 else:
                     result = process_file(path, title, author,
-                                          on_conflict=on_conflict, output_dir=output_dir)
+                                          on_conflict=on_conflict, output_dir=output_dir,
+                                          rename=rename)
                     status = result["status"]
                     self.log(f"{path.name}: {result['message']}")
 

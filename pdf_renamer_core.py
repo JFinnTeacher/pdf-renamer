@@ -13,7 +13,7 @@ from pathlib import Path
 from pypdf import PdfReader, PdfWriter
 
 # The app's version, shown in the GUI and stamped into the .exe by pdf-renamer-v2.spec.
-__version__ = "2.1.0"
+__version__ = "2.1.1"
 
 # Shown in the About window and the .exe's file properties.
 AUTHOR = "Jim Finn"
@@ -124,13 +124,16 @@ def natural_key(text):
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", text)]
 
 
-def target_path(file_path, title, output_dir=None):
-    """Where `file_path` would be written for `title`, or None if the title is unusable."""
+def target_path(file_path, title, output_dir=None, rename=True):
+    """
+    Where `file_path` would be written for `title`, or None if the title is unusable.
+    With rename=False the file keeps its own name (only its metadata changes).
+    """
     name = sanitize_filename(title or "")
     if not name:
         return None
     folder = Path(output_dir) if output_dir else Path(file_path).parent
-    return folder / f"{name}.pdf"
+    return folder / (f"{name}.pdf" if rename else Path(file_path).name)
 
 
 def unique_path(path, taken=()):
@@ -145,13 +148,13 @@ def unique_path(path, taken=()):
     return candidate
 
 
-def check_batch(entries, on_conflict="skip", output_dir=None):
+def check_batch(entries, on_conflict="skip", output_dir=None, rename=True):
     """
     Predict what a batch will do before running it. `entries` is a list of
-    (file_path, title) pairs; `on_conflict` and `output_dir` are as for
-    process_file. Returns a parallel list of (status, message):
+    (file_path, title) pairs; `on_conflict`, `output_dir` and `rename` are as
+    for process_file. Returns a parallel list of (status, message):
       "ready"     - will be renamed/copied as-is
-      "unchanged" - file already has this name (process_file will skip it)
+      "unchanged" - file keeps its name; only its metadata is updated
       "suffix"    - name is taken, a " (2)"-style number will be added
       "overwrite" - an existing file with the target name will be replaced
       "no title"  - title is empty or only invalid characters     (problem)
@@ -159,7 +162,7 @@ def check_batch(entries, on_conflict="skip", output_dir=None):
       "exists"    - target name is taken and would be skipped, or
                     overwriting it would destroy another row's file (problem)
     """
-    targets = [target_path(path, title, output_dir) for path, title in entries]
+    targets = [target_path(path, title, output_dir, rename) for path, title in entries]
 
     # Windows filenames are case-insensitive, so compare normalised paths.
     def key(path):
@@ -179,7 +182,7 @@ def check_batch(entries, on_conflict="skip", output_dir=None):
             continue
         if Path(file_path) == target:
             claimed.add(key(target))
-            results.append(("unchanged", "already named correctly"))
+            results.append(("unchanged", "keeps its name; only the metadata will be updated"))
             continue
 
         if on_conflict == "suffix":
@@ -208,7 +211,8 @@ def check_batch(entries, on_conflict="skip", output_dir=None):
     return results
 
 
-def process_file(file_path, title, author=None, on_conflict="skip", output_dir=None):
+def process_file(file_path, title, author=None, on_conflict="skip", output_dir=None,
+                 rename=True):
     """
     Save `file_path` as "<title>.pdf" and set the PDF's /Title (and /Author,
     if given) metadata.
@@ -217,24 +221,24 @@ def process_file(file_path, title, author=None, on_conflict="skip", output_dir=N
                  a folder writes a renamed copy there and keeps the original.
     on_conflict: what to do if the target name is already taken -
                  "skip", "suffix" (save as "<title> (2).pdf" etc.), or "overwrite".
+    rename:      False keeps the original filename and only sets the metadata.
+
+    A file that already has the target name has its metadata updated in place.
 
     Does not raise on failure; every outcome is reported via the returned
     dict so a batch loop can continue past errors:
-        {"status": "renamed" | "copied" | "skipped" | "failed",
+        {"status": "renamed" | "copied" | "updated" | "skipped" | "failed",
          "message": str, "old_path": Path, "new_path": Path or None}
     """
     old_path = Path(file_path)
-    new_path = target_path(old_path, title, output_dir)
+    new_path = target_path(old_path, title, output_dir, rename)
     if new_path is None:
         return {"status": "failed", "message": "empty/invalid title",
                 "old_path": old_path, "new_path": None}
 
-    if old_path == new_path:
-        return {"status": "skipped", "message": "already named correctly",
-                "old_path": old_path, "new_path": new_path}
-
+    in_place = old_path == new_path
     note = ""
-    if new_path.exists():
+    if not in_place and new_path.exists():
         if on_conflict == "suffix":
             new_path = unique_path(new_path)
         elif on_conflict == "overwrite" and not os.path.samefile(old_path, new_path):
@@ -264,6 +268,10 @@ def process_file(file_path, title, author=None, on_conflict="skip", output_dir=N
             writer.write(f)
         os.replace(tmp_path, new_path)
 
+        if in_place:
+            fields = "Title and Author" if author else "Title"
+            return {"status": "updated", "message": f"{fields} updated, name unchanged",
+                    "old_path": old_path, "new_path": new_path}
         if output_dir is None:
             os.remove(old_path)
             status = "renamed"
